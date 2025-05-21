@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Script to compile and install Weatherspoon
+
+# Directory where the script is located
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Clean any previous build
+rm -rf "$DIR/.build" "$DIR/build"
+
+# Create build directory
+mkdir -p "$DIR/build"
+
+# Build using Swift Package Manager
+cd "$DIR"
+echo "Building Weatherspoon..."
+
+# Use swiftc directly to avoid module import issues
+echo "Compiling with swiftc..."
+swiftc -sdk $(xcrun --show-sdk-path) \
+    -target x86_64-apple-macosx10.15 \
+    -emit-executable \
+    -o "$DIR/build/Weatherspoon" \
+    -I "$DIR/" \
+    Sources/Weatherspoon/*.swift
+
+# Check if build was successful
+if [ $? -ne 0 ]; then
+    echo "Build failed. Please fix errors and try again."
+    exit 1
+fi
+
+# Create app structure
+APP_DIR="$DIR/build/Weatherspoon.app"
+mkdir -p "$APP_DIR/Contents/MacOS"
+mkdir -p "$APP_DIR/Contents/Resources"
+
+echo "Creating app bundle..."
+# Copy executable
+cp "$DIR/build/Weatherspoon" "$APP_DIR/Contents/MacOS/" || {
+    echo "Error: Could not copy executable"
+    exit 1
+}
+
+# Copy Info.plist
+cp "$DIR/Resources/Info.plist" "$APP_DIR/Contents/" || {
+    echo "Error: Could not copy Info.plist from Resources directory"
+    exit 1
+}
+
+# Create basic PkgInfo
+echo "APPLaplt" > "$APP_DIR/Contents/PkgInfo"
+
+# Copy app to Applications folder if requested
+if [ "$1" == "--install" ]; then
+    echo "Installing to /Applications..."
+    cp -R "$APP_DIR" "/Applications/" || {
+        echo "Error: Could not copy to /Applications. Try running with sudo."
+        exit 1
+    }
+    echo "Weatherspoon installed to /Applications"
+    echo "You can now launch it from /Applications/Weatherspoon.app"
+else
+    echo "Build complete at $APP_DIR"
+    echo "To install to /Applications, run this script with --install"
+fi
