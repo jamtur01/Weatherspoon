@@ -251,9 +251,17 @@ class MenuBarController: NSObject {
             let maxEmoji = weatherService.getTempEmoji(forTemp: forecast.maxTemp)
             let minEmoji = weatherService.getTempEmoji(forTemp: forecast.minTemp)
             
+            // Format the date for display
+            let dateTitle: String
+            if let formattedDate = formatForecastDate(forecast.date) {
+                dateTitle = formattedDate
+            } else {
+                dateTitle = forecast.date
+            }
+            
             let forecastTitle = String(format: "%@: %@ (%@ %.1f°C - %@ %.1f°C)",
-                                      forecast.date, forecast.description,
-                                      minEmoji, forecast.minTemp, maxEmoji, forecast.maxTemp)
+                                     dateTitle, forecast.description,
+                                     minEmoji, forecast.minTemp, maxEmoji, forecast.maxTemp)
             
             let forecastItem = NSMenuItem(title: forecastTitle, action: #selector(dummyAction), keyEquivalent: "")
             forecastItem.target = self
@@ -263,6 +271,38 @@ class MenuBarController: NSObject {
         // Add separator before Settings (if not already there)
         if index < menu.items.count && !menu.items[index].isSeparatorItem {
             menu.insertItem(NSMenuItem.separator(), at: index)
+        }
+    }
+    
+    // MARK: - Helper methods
+    
+    private func formatForecastDate(_ dateString: String) -> String? {
+        // Parse the date string in format yyyy-MM-dd
+        let inputFormatter = DateFormatter()
+        inputFormatter.dateFormat = "yyyy-MM-dd"
+        
+        guard let date = inputFormatter.date(from: dateString) else {
+            return nil
+        }
+        
+        // Get today's and tomorrow's dates for comparison
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+        let dayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: today)!
+        
+        // Compare the date to today, tomorrow, and day after tomorrow
+        if calendar.isDate(date, inSameDayAs: today) {
+            return "Today"
+        } else if calendar.isDate(date, inSameDayAs: tomorrow) {
+            return "Tomorrow"
+        } else if calendar.isDate(date, inSameDayAs: dayAfterTomorrow) {
+            return "Day after tomorrow"
+        } else {
+            // For other dates, format as "yyyy-MM-dd (Day)"
+            let dayFormatter = DateFormatter()
+            dayFormatter.dateFormat = "yyyy-MM-dd (EEEE)"
+            return dayFormatter.string(from: date)
         }
     }
     

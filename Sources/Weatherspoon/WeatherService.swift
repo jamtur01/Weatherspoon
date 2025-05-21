@@ -149,11 +149,22 @@ class WeatherService {
                 
                 let chanceOfRain = Int(currentCondition.chanceOfRain ?? "0") ?? 0
                 
-                var forecasts: [Forecast] = []                
-                // Get up to 3 days of forecast
+                var forecasts: [Forecast] = []
+                
+                // Get current date in YYYY-MM-DD format
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd"
+                let currentDateStr = dateFormatter.string(from: Date())
+                
+                // Get up to 3 days of forecast, filtering out past dates
                 for forecastDay in weatherResponse.weather.prefix(3) {
                     guard let maxTemp = Double(forecastDay.maxtempC),
                           let minTemp = Double(forecastDay.mintempC) else {
+                        continue
+                    }
+                    
+                    // Skip dates earlier than today
+                    if forecastDay.date < currentDateStr {
                         continue
                     }
                     
