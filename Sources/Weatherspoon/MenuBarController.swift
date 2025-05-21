@@ -45,12 +45,18 @@ class MenuBarController: NSObject {
         statusItem.button?.title = "⌛ Loading..."
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked)
-    }    
+    }
+    
+    @objc private func dummyAction() {
+        // Do nothing - this is just to make menu items appear active
+    }
+    
     private func setupMenu() {
         // Add initial menu items
-        menu.addItem(NSMenuItem(title: "Updating weather...", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem.separator())
-        
+        let updatingItem = NSMenuItem(title: "Updating weather...", action: #selector(dummyAction), keyEquivalent: "")
+        updatingItem.target = self
+        menu.addItem(updatingItem)
+        menu.addItem(NSMenuItem.separator())        
         // Add settings submenu
         let settingsMenu = NSMenu()
         
@@ -173,7 +179,8 @@ class MenuBarController: NSObject {
                     
                     // Update menu with error
                     self.clearMenuItems()
-                    let errorItem = NSMenuItem(title: "Error: \(error.localizedDescription)", action: nil, keyEquivalent: "")
+                    let errorItem = NSMenuItem(title: "Error: \(error.localizedDescription)", action: #selector(self.dummyAction), keyEquivalent: "")
+                    errorItem.target = self
                     self.menu.insertItem(errorItem, at: 0)
                 }
             }
@@ -211,14 +218,33 @@ class MenuBarController: NSObject {
         
         menu.insertItem(NSMenuItem.separator(), at: 1)
         
-        // Current weather details
-        menu.insertItem(NSMenuItem(title: "Current Weather: \(weatherData.weatherDesc)", action: nil, keyEquivalent: ""), at: 2)
-        menu.insertItem(NSMenuItem(title: "Wind: \(weatherData.windSpeed) km/h \(weatherData.windDirection)", action: nil, keyEquivalent: ""), at: 3)
-        menu.insertItem(NSMenuItem(title: "Pressure: \(weatherData.pressure) hPa", action: nil, keyEquivalent: ""), at: 4)
-        menu.insertItem(NSMenuItem(title: "Visibility: \(weatherData.visibility) km", action: nil, keyEquivalent: ""), at: 5)
+        // Current weather details - add dummy action to make text appear active
+        let currentWeatherTitle = "Current Weather: \(weatherData.weatherDesc)"
+        let currentWeatherItem = NSMenuItem(title: currentWeatherTitle, action: #selector(dummyAction), keyEquivalent: "")
+        currentWeatherItem.target = self
+        menu.insertItem(currentWeatherItem, at: 2)
+        
+        let windTitle = "Wind: \(weatherData.windSpeed) km/h \(weatherData.windDirection)"
+        let windItem = NSMenuItem(title: windTitle, action: #selector(dummyAction), keyEquivalent: "")
+        windItem.target = self
+        menu.insertItem(windItem, at: 3)        
+        let pressureTitle = "Pressure: \(weatherData.pressure) hPa"
+        let pressureItem = NSMenuItem(title: pressureTitle, action: #selector(dummyAction), keyEquivalent: "")
+        pressureItem.target = self
+        menu.insertItem(pressureItem, at: 4)
+        
+        let visibilityTitle = "Visibility: \(weatherData.visibility) km"
+        let visibilityItem = NSMenuItem(title: visibilityTitle, action: #selector(dummyAction), keyEquivalent: "")
+        visibilityItem.target = self
+        menu.insertItem(visibilityItem, at: 5)
         
         menu.insertItem(NSMenuItem.separator(), at: 6)
-        menu.insertItem(NSMenuItem(title: "Forecast:", action: nil, keyEquivalent: ""), at: 7)        
+        
+        let forecastTitle = "Forecast:"
+        let forecastItem = NSMenuItem(title: forecastTitle, action: #selector(dummyAction), keyEquivalent: "")
+        forecastItem.target = self
+        menu.insertItem(forecastItem, at: 7)
+        
         // Add forecast items
         var index = 8
         for forecast in weatherData.forecasts {
@@ -229,10 +255,11 @@ class MenuBarController: NSObject {
                                       forecast.date, forecast.description,
                                       minEmoji, forecast.minTemp, maxEmoji, forecast.maxTemp)
             
-            menu.insertItem(NSMenuItem(title: forecastTitle, action: nil, keyEquivalent: ""), at: index)
+            let forecastItem = NSMenuItem(title: forecastTitle, action: #selector(dummyAction), keyEquivalent: "")
+            forecastItem.target = self
+            menu.insertItem(forecastItem, at: index)
             index += 1
-        }
-        
+        }        
         // Add separator before Settings (if not already there)
         if index < menu.items.count && !menu.items[index].isSeparatorItem {
             menu.insertItem(NSMenuItem.separator(), at: index)
