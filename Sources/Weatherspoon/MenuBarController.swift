@@ -73,6 +73,10 @@ class MenuBarController: NSObject {
             let item = NSMenuItem(title: title, action: #selector(setUpdateInterval(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = seconds
+            // Add checkmark to currently selected interval
+            if seconds == updateInterval {
+                item.state = .on
+            }
             updateMenu.addItem(item)
         }
         
@@ -120,6 +124,7 @@ class MenuBarController: NSObject {
     }
     
     @objc private func timerUpdate() {
+        logger.info("Timer triggered weather update (interval: \(updateInterval) seconds)")
         fetchWeather()
     }
     
@@ -154,7 +159,20 @@ class MenuBarController: NSObject {
         guard let interval = sender.representedObject as? Double else { return }
         updateInterval = interval
         UserDefaults.standard.set(updateInterval, forKey: "WeatherUpdateInterval")
+        
+        // Update checkmarks in menu
+        if let updateMenuItem = menu.items.first(where: { $0.title == "Settings" }),
+           let settingsMenu = updateMenuItem.submenu,
+           let intervalMenuItem = settingsMenu.items.first(where: { $0.title == "Update Interval" }),
+           let updateMenu = intervalMenuItem.submenu {
+            
+            for item in updateMenu.items {
+                item.state = (item.representedObject as? Double == interval) ? .on : .off
+            }
+        }
+        
         setupTimer()
+        logger.info("Weather update interval changed to \(interval) seconds")
     }
     
     @objc private func quitApp() {
