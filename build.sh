@@ -15,14 +15,13 @@ mkdir -p "$DIR/build"
 cd "$DIR"
 echo "Building Weatherspoon..."
 
-# Use swiftc directly to avoid module import issues
-echo "Compiling with swiftc..."
-swiftc -sdk $(xcrun --show-sdk-path) \
-    -target x86_64-apple-macosx10.15 \
-    -emit-executable \
-    -o "$DIR/build/Weatherspoon" \
-    -I "$DIR/" \
-    Sources/Weatherspoon/*.swift
+# Use Swift Package Manager to build
+echo "Building with Swift Package Manager..."
+swift build -c release
+
+# Copy the built executable to our build directory
+echo "Copying executable..."
+cp "$(swift build -c release --show-bin-path)/Weatherspoon" "$DIR/build/Weatherspoon"
 
 # Check if build was successful
 if [ $? -ne 0 ]; then

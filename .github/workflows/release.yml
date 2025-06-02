@@ -24,10 +24,24 @@ jobs:
           chmod +x ./build.sh
           ./build.sh
       
-      - name: Create ZIP Archive
+      - name: Create ZIP Archives
         run: |
+          # Create source archive
+          mkdir -p release
+          cp -r Sources release/
+          cp -r Resources release/
+          cp Package.swift release/
+          cp VERSION release/
+          cp build.sh release/
+          cp README.md release/
+          cd release
+          zip -r ../Weatherspoon-source.zip .
+          cd ..
+          
+          # Create app archive
           cd build
-          zip -r Weatherspoon.zip Weatherspoon.app
+          zip -r ../Weatherspoon-app.zip Weatherspoon.app
+          cd ..
       
       - name: Extract version from tag
         id: get_version
@@ -41,7 +55,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            build/Weatherspoon.zip
+            Weatherspoon-source.zip
+            Weatherspoon-app.zip
             VERSION
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -62,8 +62,15 @@ Weatherspoon follows [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PAT
 ### Release Process
 1. Update version in `VERSION` file and `Resources/Info.plist` (both `CFBundleVersion` and `CFBundleShortVersionString`)
 2. Commit changes: `git commit -am "Bump version to x.y.z"`
-3. Create and push a new tag: `git tag vx.y.z && git push origin vx.y.z`
-4. GitHub Actions will automatically build the app and create a new release with the app attached
+3. Push changes: `git push origin main` (or your default branch)
+4. Create and push a new tag: `git tag vx.y.z && git push origin vx.y.z`
+5. GitHub Actions will automatically build the app and create a new release with both source code and app attached
+
+You can use the provided `create_initial_release.sh` script to create the initial v1.0.0 release:
+```bash
+chmod +x ./create_initial_release.sh
+./create_initial_release.sh
+```
 
 ## License
 

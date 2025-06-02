@@ -29,6 +29,10 @@ if git status --porcelain | grep -q "VERSION\|Info.plist\|README.md\|.github/"; 
     git commit -m "Add versioning and GitHub release workflow"
 fi
 
+# Ensure the repository is pushed to GitHub
+echo "Pushing changes to GitHub..."
+git push origin HEAD
+
 # Create and push the tag
 echo "Creating tag v1.0.0..."
 git tag v1.0.0
