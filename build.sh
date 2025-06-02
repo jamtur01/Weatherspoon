@@ -1,6 +1,12 @@
 #!/bin/bash
 
-# Script to compile and install Weatherspoon
+# Exit on error
+set -e
+
+# Get version from VERSION file
+VERSION=$(cat VERSION)
+
+echo "Building Weatherspoon version $VERSION..."
 
 # Directory where the script is located
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -11,53 +17,36 @@ rm -rf "$DIR/.build" "$DIR/build"
 # Create build directory
 mkdir -p "$DIR/build"
 
-# Build using direct Swift compilation
+# Build using Swift
 cd "$DIR"
-echo "Building Weatherspoon..."
-
-# Use swiftc directly
-echo "Compiling with swiftc..."
-
-# Determine if we're running on GitHub Actions
-if [ -n "$GITHUB_ACTIONS" ]; then
-    # GitHub Actions environment - use simpler flags
-    swiftc -o "$DIR/build/Weatherspoon" Sources/Weatherspoon/*.swift
-else
-    # Local environment - use full flags
-    swiftc -sdk $(xcrun --show-sdk-path) \
-        -target x86_64-apple-macosx10.15 \
-        -emit-executable \
-        -o "$DIR/build/Weatherspoon" \
-        -I "$DIR/" \
-        Sources/Weatherspoon/*.swift
-fi
-
-# Check if build was successful
-if [ $? -ne 0 ]; then
-    echo "Build failed. Please fix errors and try again."
-    exit 1
-fi
+echo "Building with Swift..."
+swift build -c release
 
 # Create app structure
 APP_DIR="$DIR/build/Weatherspoon.app"
-mkdir -p "$APP_DIR/Contents/MacOS"
-mkdir -p "$APP_DIR/Contents/Resources"
+CONTENTS_DIR="$APP_DIR/Contents"
+MACOS_DIR="$CONTENTS_DIR/MacOS"
+RESOURCES_DIR="$CONTENTS_DIR/Resources"
+
+# Create directory structure
+mkdir -p "$MACOS_DIR"
+mkdir -p "$RESOURCES_DIR"
 
 echo "Creating app bundle..."
 # Copy executable
-cp "$DIR/build/Weatherspoon" "$APP_DIR/Contents/MacOS/" || {
+cp "$(swift build -c release --show-bin-path)/Weatherspoon" "$MACOS_DIR/" || {
     echo "Error: Could not copy executable"
     exit 1
 }
 
 # Copy Info.plist
-cp "$DIR/Resources/Info.plist" "$APP_DIR/Contents/" || {
+cp "$DIR/Resources/Info.plist" "$CONTENTS_DIR/" || {
     echo "Error: Could not copy Info.plist from Resources directory"
     exit 1
 }
 
 # Create basic PkgInfo
-echo "APPLaplt" > "$APP_DIR/Contents/PkgInfo"
+echo "APPLaplt" > "$CONTENTS_DIR/PkgInfo"
 
 # Copy app to Applications folder if requested
 if [ "$1" == "--install" ]; then
@@ -69,6 +58,6 @@ if [ "$1" == "--install" ]; then
     echo "Weatherspoon installed to /Applications"
     echo "You can now launch it from /Applications/Weatherspoon.app"
 else
-    echo "Build complete at $APP_DIR"
+    echo "Application bundle created: $APP_DIR"
     echo "To install to /Applications, run this script with --install"
 fi

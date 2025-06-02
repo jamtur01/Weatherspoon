@@ -3,65 +3,70 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v*' # Trigger on tag push with pattern v*, e.g., v1.0.0
+      - 'v*' # Run when tag matches v*, e.g., v1.0.0
 
 jobs:
-  build:
-    name: Build and Create Release
+  build-and-test:
     runs-on: macos-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      
-      - name: Set up Swift
-        uses: swift-actions/setup-swift@v1
-        with:
-          swift-version: '5.3'
-      
-      - name: Install macOS dependencies
-        run: |
-          echo "Setting up environment for Swift compilation"
-          export GITHUB_ACTIONS=true
-      
-      - name: Build Application
-        run: |
-          chmod +x ./build.sh
-          ./build.sh
-      
-      - name: Create ZIP Archives
-        run: |
-          # Create source archive
-          mkdir -p release
-          cp -r Sources release/
-          cp -r Resources release/
-          cp Package.swift release/
-          cp VERSION release/
-          cp build.sh release/
-          cp README.md release/
-          cd release
-          zip -r ../Weatherspoon-source.zip .
-          cd ..
+    - uses: actions/checkout@v4
+    - name: Build
+      run: swift build -v
+
+  create-release:
+    needs: build-and-test
+    runs-on: macos-latest
+    permissions:
+      contents: write # Needed for creating releases
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create application bundle
+      run: |
+        chmod +x ./build.sh
+        ./build.sh
+    
+    - name: Create ZIP archives
+      run: |
+        # Create app archive
+        cd build
+        zip -r ../Weatherspoon.zip Weatherspoon.app
+        cd ..
+        
+        # Create source archive
+        mkdir -p release
+        cp -r Sources release/
+        cp -r Resources release/
+        cp Package.swift release/
+        cp VERSION release/
+        cp build.sh release/
+        cp README.md release/
+        cd release
+        zip -r ../Weatherspoon-source.zip .
+        cd ..
+    
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ steps.get_version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        files: |
+          Weatherspoon.zip
+          Weatherspoon-source.zip
+          VERSION
+        body: |
+          # Weatherspoon ${{ steps.get_version.outputs.VERSION }}
           
-          # Create app archive
-          cd build
-          zip -r ../Weatherspoon-app.zip Weatherspoon.app
-          cd ..
-      
-      - name: Extract version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
-      
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          name: Release ${{ env.VERSION }}
-          draft: false
-          prerelease: false
-          files: |
-            Weatherspoon-source.zip
-            Weatherspoon-app.zip
-            VERSION
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          A macOS menu bar app to display current weather information based on your location or a specified city.
+          
+          ## Installation
+          
+          1. Download the Weatherspoon.zip file
+          2. Unzip the file
+          3. Move Weatherspoon.app to your Applications folder
+          4. Open the application
