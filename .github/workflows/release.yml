@@ -1,0 +1,47 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on tag push with pattern v*, e.g., v1.0.0
+
+jobs:
+  build:
+    name: Build and Create Release
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@v1
+        with:
+          swift-version: '5.3'
+      
+      - name: Build Application
+        run: |
+          chmod +x ./build.sh
+          ./build.sh
+      
+      - name: Create ZIP Archive
+        run: |
+          cd build
+          zip -r Weatherspoon.zip Weatherspoon.app
+      
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            build/Weatherspoon.zip
+            VERSION
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

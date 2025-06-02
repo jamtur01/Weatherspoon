@@ -51,6 +51,20 @@ Click on the menu bar icon to view detailed weather information and access setti
 - Weather data provided by [wttr.in](https://wttr.in)
 - Based on the Hammerspoon Weather.spoon by James Turnbull
 
+## Versioning and Releases
+
+Weatherspoon follows [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
+
+### Version Information
+- Current version is stored in the `VERSION` file and in `Resources/Info.plist`
+- Version format: `v1.0.0` (for tags and releases)
+
+### Release Process
+1. Update version in `VERSION` file and `Resources/Info.plist` (both `CFBundleVersion` and `CFBundleShortVersionString`)
+2. Commit changes: `git commit -am "Bump version to x.y.z"`
+3. Create and push a new tag: `git tag vx.y.z && git push origin vx.y.z`
+4. GitHub Actions will automatically build the app and create a new release with the app attached
+
 ## License
 
 MIT
