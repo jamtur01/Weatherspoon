@@ -19,6 +19,11 @@ jobs:
         with:
           swift-version: '5.3'
       
+      - name: Install macOS dependencies
+        run: |
+          echo "Setting up environment for Swift compilation"
+          export GITHUB_ACTIONS=true
+      
       - name: Build Application
         run: |
           chmod +x ./build.sh

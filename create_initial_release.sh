@@ -2,6 +2,9 @@
 
 # Script to create the initial v1.0.0 release
 
+# Make sure the build script is executable
+chmod +x ./build.sh
+
 echo "Creating initial v1.0.0 release for Weatherspoon..."
 
 # Check if git is installed
@@ -23,9 +26,9 @@ if ! git diff-index --quiet HEAD --; then
 fi
 
 # Commit the version files if they're not already committed
-if git status --porcelain | grep -q "VERSION\|Info.plist\|README.md\|.github/"; then
+if git status --porcelain | grep -q "VERSION\|Info.plist\|README.md\|.github/\|build.sh"; then
     echo "Committing version files..."
-    git add VERSION Resources/Info.plist README.md .github/
+    git add VERSION Resources/Info.plist README.md .github/ build.sh
     git commit -m "Add versioning and GitHub release workflow"
 fi
 

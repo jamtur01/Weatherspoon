@@ -11,17 +11,26 @@ rm -rf "$DIR/.build" "$DIR/build"
 # Create build directory
 mkdir -p "$DIR/build"
 
-# Build using Swift Package Manager
+# Build using direct Swift compilation
 cd "$DIR"
 echo "Building Weatherspoon..."
 
-# Use Swift Package Manager to build
-echo "Building with Swift Package Manager..."
-swift build -c release
+# Use swiftc directly
+echo "Compiling with swiftc..."
 
-# Copy the built executable to our build directory
-echo "Copying executable..."
-cp "$(swift build -c release --show-bin-path)/Weatherspoon" "$DIR/build/Weatherspoon"
+# Determine if we're running on GitHub Actions
+if [ -n "$GITHUB_ACTIONS" ]; then
+    # GitHub Actions environment - use simpler flags
+    swiftc -o "$DIR/build/Weatherspoon" Sources/Weatherspoon/*.swift
+else
+    # Local environment - use full flags
+    swiftc -sdk $(xcrun --show-sdk-path) \
+        -target x86_64-apple-macosx10.15 \
+        -emit-executable \
+        -o "$DIR/build/Weatherspoon" \
+        -I "$DIR/" \
+        Sources/Weatherspoon/*.swift
+fi
 
 # Check if build was successful
 if [ $? -ne 0 ]; then
