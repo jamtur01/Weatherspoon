@@ -1,27 +1,22 @@
 import Cocoa
 import CoreLocation
 
-class MenuBarController: NSObject {
+public class MenuBarController: NSObject {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private let weatherService = WeatherService.shared
     private let locationManager = LocationManager.shared
+    private let logger = Logger(subsystem: "com.weatherspoon", category: "weather")
+    private let config = Configuration.shared
     
     private var timer: Timer?
     private var currentLocation: CLLocation?
     
-    // Default settings
-    private var cityName = UserDefaults.standard.string(forKey: "WeatherCityName") ?? "Brooklyn USA"
-    private var updateInterval: Double = {
-        let savedInterval = UserDefaults.standard.double(forKey: "WeatherUpdateInterval") 
-        return savedInterval > 0 ? savedInterval : 3600 // Default 1 hour if not set or zero
-    }()
-    
-    // Weather data
+    // Weather data cache
     private var currentWeatherData: WeatherData?
-    private var logger = Logger(subsystem: "com.weatherspoon", category: "weather")
+    private var lastFetchTime: Date?
     
-    override init() {
+    public override init() {
         super.init()
         
         setupStatusItem()
@@ -35,7 +30,7 @@ class MenuBarController: NSObject {
         setupTimer()
     }
     
-    func cleanup() {
+    public func cleanup() {
         timer?.invalidate()
         locationManager.cleanup()
     }
@@ -60,21 +55,26 @@ class MenuBarController: NSObject {
         // Add settings submenu
         let settingsMenu = NSMenu()
         
+        // Location toggle
+        let useLocationItem = NSMenuItem(title: "Use Current Location", action: #selector(toggleUseLocation), keyEquivalent: "l")
+        useLocationItem.target = self
+        useLocationItem.state = config.useLocation ? .on : .off
+        settingsMenu.addItem(useLocationItem)
+        
         // City name setting
         let cityMenuItem = NSMenuItem(title: "Set City", action: #selector(setCity), keyEquivalent: "c")
         cityMenuItem.target = self
         settingsMenu.addItem(cityMenuItem)
         
         // Update interval settings
-        let intervals = [("30 minutes", 1800.0), ("1 hour", 3600.0), ("2 hours", 7200.0), ("4 hours", 14400.0)]
         let updateMenu = NSMenu()
         
-        for (title, seconds) in intervals {
+        for (title, seconds) in config.availableIntervals {
             let item = NSMenuItem(title: title, action: #selector(setUpdateInterval(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = seconds
             // Add checkmark to currently selected interval
-            if seconds == updateInterval {
+            if seconds == config.updateInterval {
                 item.state = .on
             }
             updateMenu.addItem(item)
@@ -105,30 +105,57 @@ class MenuBarController: NSObject {
     private func setupLocationManager() {
         locationManager.onLocationUpdate = { [weak self] location in
             self?.currentLocation = location
-            self?.fetchWeather()
+            self?.logger.info("Location updated: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+            // Clear cache to force using new location
+            self?.lastFetchTime = nil
+            self?.currentWeatherData = nil
+            // Only fetch weather if we're using location
+            if self?.config.useLocation == true {
+                self?.fetchWeather()
+            }
         }
         
         locationManager.onLocationError = { [weak self] error in
-            print("Location error: \(error.localizedDescription)")
+            self?.logger.error("Location error: \(error.localizedDescription)")
             // If location fails, fall back to city name
             self?.fetchWeather()
         }
         
-        // Request location
-        locationManager.requestLocation()
+        // Request location if enabled (default is true)
+        if config.useLocation {
+            logger.info("Requesting location (useLocation: true)")
+            // Check if we already have a location from the shared instance
+            if let existingLocation = locationManager.currentLocation {
+                currentLocation = existingLocation
+                logger.info("Using existing location: \(existingLocation.coordinate.latitude), \(existingLocation.coordinate.longitude)")
+            }
+            locationManager.requestLocation()
+        } else {
+            logger.info("Not requesting location (useLocation: false)")
+        }
     }
     
     private func setupTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(timeInterval: updateInterval, target: self, selector: #selector(timerUpdate), userInfo: nil, repeats: true)
+        timer = Timer.scheduledTimer(timeInterval: config.updateInterval, target: self, selector: #selector(timerUpdate), userInfo: nil, repeats: true)
     }
     
     @objc private func timerUpdate() {
-        logger.info("Timer triggered weather update (interval: \(updateInterval) seconds)")
+        logger.info("Timer triggered weather update (interval: \(config.updateInterval) seconds)")
         fetchWeather()
     }
     
     @objc private func refreshWeather() {
+        // Clear cache to force fresh data
+        lastFetchTime = nil
+        currentWeatherData = nil
+        
+        // If using location and we don't have one, request it again
+        if config.useLocation && currentLocation == nil {
+            logger.info("Refresh requested, no location available, requesting location")
+            locationManager.requestLocation()
+        }
+        
         fetchWeather()
     }
     
@@ -137,28 +164,54 @@ class MenuBarController: NSObject {
         statusItem.button?.performClick(nil)
     }
     
+    @objc private func toggleUseLocation() {
+        config.useLocation.toggle()
+        
+        // Update menu checkmark
+        if let settingsMenuItem = menu.items.first(where: { $0.title == "Settings" }),
+           let settingsMenu = settingsMenuItem.submenu,
+           let locationItem = settingsMenu.items.first(where: { $0.title == "Use Current Location" }) {
+            locationItem.state = config.useLocation ? .on : .off
+        }
+        
+        // Clear cached data to force refresh
+        currentWeatherData = nil
+        lastFetchTime = nil
+        
+        // Request location if just enabled
+        if config.useLocation {
+            logger.info("Location enabled, requesting location")
+            locationManager.requestLocation()
+        } else {
+            // Clear current location if disabled
+            logger.info("Location disabled, using city name: \(config.cityName)")
+            currentLocation = nil
+        }
+        
+        // Refresh weather with new setting
+        fetchWeather()
+    }
+    
     @objc private func setCity() {
         let alert = NSAlert()
         alert.messageText = "Set City Name"
-        alert.informativeText = "Enter the name of the city for weather information"
+        alert.informativeText = "Enter the name of the city for weather information (e.g., 'Brooklyn, NYC' or 'London, UK')"
         
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        textField.stringValue = cityName
+        textField.stringValue = config.cityName
         alert.accessoryView = textField
         
         alert.addButton(withTitle: "OK")
         alert.addButton(withTitle: "Cancel")
         
         if alert.runModal() == .alertFirstButtonReturn {
-            cityName = textField.stringValue
-            UserDefaults.standard.set(cityName, forKey: "WeatherCityName")
+            config.cityName = textField.stringValue
             fetchWeather()
         }
     }    
     @objc private func setUpdateInterval(_ sender: NSMenuItem) {
         guard let interval = sender.representedObject as? Double else { return }
-        updateInterval = interval
-        UserDefaults.standard.set(updateInterval, forKey: "WeatherUpdateInterval")
+        config.updateInterval = interval
         
         // Update checkmarks in menu
         if let updateMenuItem = menu.items.first(where: { $0.title == "Settings" }),
@@ -180,19 +233,45 @@ class MenuBarController: NSObject {
     }
     
     private func fetchWeather() {
+        // Check if we have cached data that's still fresh (within 5 minutes)
+        if let lastFetch = lastFetchTime, 
+           let weatherData = currentWeatherData,
+           Date().timeIntervalSince(lastFetch) < 300 { // 5 minutes
+            logger.debug("Using cached weather data")
+            updateMenuBar(with: weatherData)
+            updateMenu(with: weatherData)
+            return
+        }
+        
         statusItem.button?.title = "⌛ Updating..."
         
-        weatherService.fetchWeather(location: currentLocation, cityName: cityName) { [weak self] result in
+        // Use location only if enabled, otherwise use city name
+        let locationToUse = config.useLocation ? currentLocation : nil
+        
+        // Log what we're using
+        if config.useLocation {
+            if let loc = currentLocation {
+                logger.info("Using location: \(loc.coordinate.latitude), \(loc.coordinate.longitude)")
+            } else {
+                logger.warning("Location enabled but no location available yet, falling back to city")
+            }
+        } else {
+            logger.info("Using city name: \(config.cityName)")
+        }
+        
+        weatherService.fetchWeather(location: locationToUse, cityName: config.cityName) { [weak self] result in
             guard let self = self else { return }
             
             DispatchQueue.main.async {
                 switch result {
                 case .success(let weatherData):
                     self.currentWeatherData = weatherData
+                    self.lastFetchTime = Date()
                     self.updateMenuBar(with: weatherData)
                     self.updateMenu(with: weatherData)
+                    self.logger.info("Weather updated successfully")
                 case .failure(let error):
-                    print("Weather error: \(error.localizedDescription)")
+                    self.logger.error("Weather fetch failed: \(error.localizedDescription)")
                     self.statusItem.button?.title = "⚠️ Error"
                     
                     // Update menu with error
@@ -341,23 +420,5 @@ class MenuBarController: NSObject {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
-    }
-}
-
-class Logger {
-    let subsystem: String
-    let category: String
-    
-    init(subsystem: String, category: String) {
-        self.subsystem = subsystem
-        self.category = category
-    }
-    
-    func info(_ message: String) {
-        print("[\(category)] INFO: \(message)")
-    }
-    
-    func error(_ message: String) {
-        print("[\(category)] ERROR: \(message)")
     }
 }

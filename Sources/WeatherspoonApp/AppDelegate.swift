@@ -1,4 +1,5 @@
 import Cocoa
+import WeatherspoonCore
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController!

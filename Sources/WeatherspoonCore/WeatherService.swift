@@ -4,8 +4,20 @@ import CoreLocation
 class WeatherService {
     static let shared = WeatherService()
     
-    private let urlSession = URLSession.shared
+    private let urlSession: URLSession
     private let baseURL = "https://wttr.in"
+    private let logger = Logger(subsystem: "com.weatherspoon", category: "weather-service")
+    
+    // Retry configuration
+    private let maxRetries = 3
+    private let retryDelay: TimeInterval = 2.0
+    
+    init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        urlSession = URLSession(configuration: config)
+    }
     
     // Weather emojis mapping
     let weatherEmojis: [String: String] = [
@@ -89,6 +101,10 @@ class WeatherService {
     }
     
     func fetchWeather(location: CLLocation?, cityName: String?, completion: @escaping (Result<WeatherData, Error>) -> Void) {
+        fetchWeatherWithRetry(location: location, cityName: cityName, retryCount: 0, completion: completion)
+    }
+    
+    private func fetchWeatherWithRetry(location: CLLocation?, cityName: String?, retryCount: Int, completion: @escaping (Result<WeatherData, Error>) -> Void) {
         var urlString: String
         var isUsingLocation = false
         
@@ -97,18 +113,20 @@ class WeatherService {
             let longitude = String(format: "%.2f", location.coordinate.longitude)
             urlString = "\(baseURL)/\(latitude),\(longitude)?format=j1"
             isUsingLocation = true
+            logger.info("Fetching weather for location: \(latitude), \(longitude)")
         } else if let cityName = cityName, !cityName.isEmpty {
             guard let encodedCity = cityName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-                completion(.failure(NSError(domain: "com.weatherspoon", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid city name"])))
+                completion(.failure(NetworkError.invalidCityName))
                 return
             }
             urlString = "\(baseURL)/\(encodedCity)?format=j1"
+            logger.info("Fetching weather for city: \(cityName)")
         } else {
-            completion(.failure(NSError(domain: "com.weatherspoon", code: 2, userInfo: [NSLocalizedDescriptionKey: "No location or city provided"])))
+            completion(.failure(NetworkError.noLocationOrCity))
             return
         }        
         guard let url = URL(string: urlString) else {
-            completion(.failure(NSError(domain: "com.weatherspoon", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+            completion(.failure(NetworkError.invalidURL))
             return
         }
         
@@ -116,19 +134,55 @@ class WeatherService {
         request.addValue("curl/7.64.1", forHTTPHeaderField: "User-Agent")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
-        let task = urlSession.dataTask(with: request) { (data, response, error) in
+        let task = urlSession.dataTask(with: request) { [weak self] (data, response, error) in
+            guard let self = self else { return }
+            
             if let error = error {
-                completion(.failure(error))
+                // Check if it's a timeout error
+                if (error as NSError).code == NSURLErrorTimedOut {
+                    self.logger.warning("Request timed out, retry #\(retryCount + 1)")
+                    if retryCount < self.maxRetries {
+                        DispatchQueue.global().asyncAfter(deadline: .now() + self.retryDelay) {
+                            self.fetchWeatherWithRetry(location: location, cityName: cityName, retryCount: retryCount + 1, completion: completion)
+                        }
+                        return
+                    }
+                    completion(.failure(NetworkError.timeout))
+                    return
+                }
+                self.logger.error("Network error: \(error.localizedDescription)")
+                completion(.failure(NetworkError.networkError(error)))
                 return
             }
             
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                completion(.failure(NSError(domain: "com.weatherspoon", code: 4, userInfo: [NSLocalizedDescriptionKey: "Invalid HTTP response"])))
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(NetworkError.invalidResponse(statusCode: 0)))
+                return
+            }
+            
+            // Handle different status codes
+            switch httpResponse.statusCode {
+            case 200:
+                break // Success
+            case 500...599:
+                // Server error - retry
+                self.logger.warning("Server error \(httpResponse.statusCode), retry #\(retryCount + 1)")
+                if retryCount < self.maxRetries {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + self.retryDelay) {
+                        self.fetchWeatherWithRetry(location: location, cityName: cityName, retryCount: retryCount + 1, completion: completion)
+                    }
+                    return
+                }
+                completion(.failure(NetworkError.invalidResponse(statusCode: httpResponse.statusCode)))
+                return
+            default:
+                self.logger.error("Invalid response code: \(httpResponse.statusCode)")
+                completion(.failure(NetworkError.invalidResponse(statusCode: httpResponse.statusCode)))
                 return
             }
             
             guard let data = data else {
-                completion(.failure(NSError(domain: "com.weatherspoon", code: 5, userInfo: [NSLocalizedDescriptionKey: "No data received"])))
+                completion(.failure(NetworkError.noData))
                 return
             }
             
@@ -143,7 +197,8 @@ class WeatherService {
                       let feelsLike = Double(currentCondition.feelsLikeC),
                       let humidity = Int(currentCondition.humidity),
                       let areaName = weatherResponse.nearestArea.first?.areaName.first?.value else {
-                    completion(.failure(NSError(domain: "com.weatherspoon", code: 6, userInfo: [NSLocalizedDescriptionKey: "Invalid weather data"])))
+                    self.logger.error("Invalid weather data structure")
+                    completion(.failure(NetworkError.invalidWeatherData))
                     return
                 }
                 
@@ -200,9 +255,11 @@ class WeatherService {
                     cityName: isUsingLocation ? nil : cityName
                 )
                 
+                self.logger.info("Weather data fetched successfully for \(areaName)")
                 completion(.success(weatherData))
             } catch {
-                completion(.failure(error))
+                self.logger.error("Decoding error: \(error.localizedDescription)")
+                completion(.failure(NetworkError.decodingError(error)))
             }
         }
         

@@ -7,12 +7,18 @@ let package = Package(
         .macOS(.v10_15)
     ],
     products: [
-        .executable(name: "Weatherspoon", targets: ["Weatherspoon"])
+        .executable(name: "Weatherspoon", targets: ["WeatherspoonApp"])
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "Weatherspoon",
+            name: "WeatherspoonCore",
             dependencies: []),
+        .target(
+            name: "WeatherspoonApp",
+            dependencies: ["WeatherspoonCore"]),
+        .testTarget(
+            name: "WeatherspoonTests",
+            dependencies: ["WeatherspoonCore"]),
     ]
 )
