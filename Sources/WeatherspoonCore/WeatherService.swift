@@ -6,7 +6,7 @@ class WeatherService {
     
     private let urlSession: URLSession
     private let baseURL = "https://wttr.in"
-    private let logger = Logger(subsystem: "com.weatherspoon", category: "weather-service")
+    private let logger = Logger(subsystem: "net.kartar.weatherspoon", category: "weather-service")
     
     // Retry configuration
     private let maxRetries = 3
@@ -109,8 +109,9 @@ class WeatherService {
         var isUsingLocation = false
         
         if let location = location {
-            let latitude = String(format: "%.2f", location.coordinate.latitude)
-            let longitude = String(format: "%.2f", location.coordinate.longitude)
+            // Use more precise coordinates (4 decimal places) to avoid "Unknown location" errors
+            let latitude = String(format: "%.4f", location.coordinate.latitude)
+            let longitude = String(format: "%.4f", location.coordinate.longitude)
             urlString = "\(baseURL)/\(latitude),\(longitude)?format=j1"
             isUsingLocation = true
             logger.info("Fetching weather for location: \(latitude), \(longitude)")
@@ -186,6 +187,28 @@ class WeatherService {
                 return
             }
             
+            // Debug: Log raw response
+            if let responseString = String(data: data, encoding: .utf8) {
+                self.logger.debug("Raw API response: \(responseString)")
+                
+                // Check if response is an error message (not JSON)
+                if responseString.lowercased().contains("unknown location") || 
+                   responseString.lowercased().contains("error") ||
+                   !responseString.starts(with: "{") {
+                    self.logger.error("API returned error message: \(responseString)")
+                    
+                    // If using location failed, retry with city name
+                    if isUsingLocation && retryCount == 0 {
+                        self.logger.info("Location failed, retrying with city name: \(cityName ?? "default")")
+                        self.fetchWeatherWithRetry(location: nil, cityName: cityName, retryCount: retryCount + 1, completion: completion)
+                        return
+                    }
+                    
+                    completion(.failure(NetworkError.invalidWeatherData))
+                    return
+                }
+            }
+            
             do {
                 let decoder = JSONDecoder()
                 let weatherResponse = try decoder.decode(WeatherResponse.self, from: data)
@@ -257,8 +280,22 @@ class WeatherService {
                 
                 self.logger.info("Weather data fetched successfully for \(areaName)")
                 completion(.success(weatherData))
+            } catch let decodingError as DecodingError {
+                switch decodingError {
+                case .keyNotFound(let key, let context):
+                    self.logger.error("Decoding error - Missing key: \(key.stringValue) in \(context.debugDescription)")
+                case .typeMismatch(let type, let context):
+                    self.logger.error("Decoding error - Type mismatch: expected \(type) in \(context.debugDescription)")
+                case .valueNotFound(let type, let context):
+                    self.logger.error("Decoding error - Value not found: \(type) in \(context.debugDescription)")
+                case .dataCorrupted(let context):
+                    self.logger.error("Decoding error - Data corrupted: \(context.debugDescription)")
+                @unknown default:
+                    self.logger.error("Decoding error - Unknown: \(decodingError.localizedDescription)")
+                }
+                completion(.failure(NetworkError.decodingError(decodingError)))
             } catch {
-                self.logger.error("Decoding error: \(error.localizedDescription)")
+                self.logger.error("General error: \(error.localizedDescription)")
                 completion(.failure(NetworkError.decodingError(error)))
             }
         }

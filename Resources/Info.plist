@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.jamtur01.Weatherspoon</string>
+    <string>net.kartar.weatherspoon</string>
     <key>CFBundleName</key>
     <string>Weatherspoon</string>
     <key>CFBundleDisplayName</key>

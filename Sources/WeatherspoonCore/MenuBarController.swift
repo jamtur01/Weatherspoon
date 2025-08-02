@@ -6,7 +6,7 @@ public class MenuBarController: NSObject {
     private let menu = NSMenu()
     private let weatherService = WeatherService.shared
     private let locationManager = LocationManager.shared
-    private let logger = Logger(subsystem: "com.weatherspoon", category: "weather")
+    private let logger = Logger(subsystem: "net.kartar.weatherspoon", category: "weather")
     private let config = Configuration.shared
     
     private var timer: Timer?
@@ -123,15 +123,16 @@ public class MenuBarController: NSObject {
         
         // Request location if enabled (default is true)
         if config.useLocation {
-            logger.info("Requesting location (useLocation: true)")
+            logger.info("Starting location tracking (useLocation: true)")
             // Check if we already have a location from the shared instance
             if let existingLocation = locationManager.currentLocation {
                 currentLocation = existingLocation
                 logger.info("Using existing location: \(existingLocation.coordinate.latitude), \(existingLocation.coordinate.longitude)")
             }
-            locationManager.requestLocation()
+            locationManager.startLocationTracking()
         } else {
-            logger.info("Not requesting location (useLocation: false)")
+            logger.info("Not tracking location (useLocation: false)")
+            locationManager.stopLocationTracking()
         }
     }
     
@@ -146,17 +147,27 @@ public class MenuBarController: NSObject {
     }
     
     @objc private func refreshWeather() {
+        logger.info("Manual refresh requested")
+        
         // Clear cache to force fresh data
         lastFetchTime = nil
         currentWeatherData = nil
         
-        // If using location and we don't have one, request it again
-        if config.useLocation && currentLocation == nil {
-            logger.info("Refresh requested, no location available, requesting location")
-            locationManager.requestLocation()
+        // If using location, fetch weather with current location
+        if config.useLocation {
+            logger.info("Refresh requested with location enabled")
+            if let location = locationManager.currentLocation {
+                currentLocation = location
+                fetchWeather()
+            } else {
+                // Request location if we don't have one
+                locationManager.requestLocation()
+            }
+        } else {
+            // If using city name, fetch weather immediately
+            logger.info("Refresh requested with city name: \(config.cityName)")
+            fetchWeather()
         }
-        
-        fetchWeather()
     }
     
     @objc private func statusItemClicked() {
@@ -178,13 +189,14 @@ public class MenuBarController: NSObject {
         currentWeatherData = nil
         lastFetchTime = nil
         
-        // Request location if just enabled
+        // Start or stop location tracking based on setting
         if config.useLocation {
-            logger.info("Location enabled, requesting location")
-            locationManager.requestLocation()
+            logger.info("Location enabled, starting location tracking")
+            locationManager.startLocationTracking()
         } else {
-            // Clear current location if disabled
+            // Stop tracking and clear current location if disabled
             logger.info("Location disabled, using city name: \(config.cityName)")
+            locationManager.stopLocationTracking()
             currentLocation = nil
         }
         
@@ -206,6 +218,13 @@ public class MenuBarController: NSObject {
         
         if alert.runModal() == .alertFirstButtonReturn {
             config.cityName = textField.stringValue
+            logger.info("City name changed to: \(textField.stringValue)")
+            
+            // Clear cache to force fresh data
+            lastFetchTime = nil
+            currentWeatherData = nil
+            
+            // Refresh weather with new city
             fetchWeather()
         }
     }    
@@ -245,15 +264,15 @@ public class MenuBarController: NSObject {
         
         statusItem.button?.title = "⌛ Updating..."
         
-        // Use location only if enabled, otherwise use city name
-        let locationToUse = config.useLocation ? currentLocation : nil
+        // Use location only if enabled AND we have a location, otherwise use city name
+        let locationToUse = (config.useLocation && currentLocation != nil) ? currentLocation : nil
         
         // Log what we're using
         if config.useLocation {
             if let loc = currentLocation {
                 logger.info("Using location: \(loc.coordinate.latitude), \(loc.coordinate.longitude)")
             } else {
-                logger.warning("Location enabled but no location available yet, falling back to city")
+                logger.warning("Location enabled but no location available yet, using city: \(config.cityName)")
             }
         } else {
             logger.info("Using city name: \(config.cityName)")
@@ -364,7 +383,25 @@ public class MenuBarController: NSObject {
             forecastItem.target = self
             menu.insertItem(forecastItem, at: index)
             index += 1
-        }        
+        }
+        
+        // Add location/city info
+        menu.insertItem(NSMenuItem.separator(), at: index)
+        index += 1
+        
+        let locationInfoTitle: String
+        if weatherData.isUsingLocation, let lat = weatherData.latitude, let lon = weatherData.longitude {
+            locationInfoTitle = String(format: "📍 Using location: %.2f, %.2f", lat, lon)
+        } else if let cityName = weatherData.cityName {
+            locationInfoTitle = "🏙️ Using city: \(cityName)"
+        } else {
+            locationInfoTitle = "❓ Location unknown"
+        }
+        
+        let locationInfoItem = NSMenuItem(title: locationInfoTitle, action: #selector(dummyAction), keyEquivalent: "")
+        locationInfoItem.target = self
+        menu.insertItem(locationInfoItem, at: index)
+        index += 1        
         // Add separator before Settings (if not already there)
         if index < menu.items.count && !menu.items[index].isSeparatorItem {
             menu.insertItem(NSMenuItem.separator(), at: index)
