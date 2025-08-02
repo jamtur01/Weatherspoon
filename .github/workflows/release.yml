@@ -21,10 +21,44 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Set up signing certificate
+      env:
+        MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      run: |
+        echo "$MACOS_CERTIFICATE_P12" | base64 --decode > certificate.p12
+        security create-keychain -p "temporary-password" build.keychain 
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "temporary-password" build.keychain
+        security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "temporary-password" build.keychain
+    
     - name: Create application bundle
       run: |
         chmod +x ./build.sh
-        ./build.sh
+        CI=1 ./build.sh
+    
+    - name: Code sign the app
+      env:
+        MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+      run: |
+        /usr/bin/codesign --force --options runtime --entitlements Resources/Weatherspoon.entitlements --sign "$MACOS_CODESIGN_IDENTITY" build/Weatherspoon.app --deep
+    
+    - name: Notarize the app
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        MACOS_API_ISSUER_ID: ${{ secrets.MACOS_API_ISSUER_ID }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      run: |
+        xcrun notarytool store-credentials "notarytool-profile" \
+          --apple-id "$APPLE_ID" \
+          --team-id "$MACOS_API_ISSUER_ID" \
+          --password "$APPLE_APP_SPECIFIC_PASSWORD"
+
+        ditto -c -k --keepParent build/Weatherspoon.app notarization.zip
+
+        xcrun notarytool submit notarization.zip --keychain-profile "notarytool-profile" --wait
+        xcrun stapler staple build/Weatherspoon.app || echo "Stapling failed, but continuing..."
     
     - name: Create ZIP archives
       run: |
