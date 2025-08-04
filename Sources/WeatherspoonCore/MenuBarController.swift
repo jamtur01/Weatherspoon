@@ -253,8 +253,6 @@ public class MenuBarController: NSObject {
         // Use location only if enabled AND we have a location, otherwise use city name
         let locationToUse = (config.useLocation && currentLocation != nil) ? currentLocation : nil
         
-        print("Fetching weather - useLocation: \(config.useLocation), hasLocation: \(currentLocation != nil), cityName: \(config.cityName)")
-        
         weatherService.fetchWeather(location: locationToUse, cityName: config.cityName) { [weak self] result in
             guard let self = self else { return }
             
@@ -265,7 +263,6 @@ public class MenuBarController: NSObject {
                     self.updateMenuBar(with: weatherData)
                     self.updateMenu(with: weatherData)
                 case .failure(let error):
-                    print("Weather fetch error: \(error)")
                     self.statusItem.button?.title = "⚠️ Error"
                     
                     // Update menu with error
