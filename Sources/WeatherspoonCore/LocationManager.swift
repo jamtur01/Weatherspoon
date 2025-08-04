@@ -5,15 +5,32 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
     static let shared = LocationManager()
     
     private let locationManager = CLLocationManager()
-    var currentLocation: CLLocation?
+    private let queue = DispatchQueue(label: "com.weatherspoon.location")
+    
+    private var _currentLocation: CLLocation?
+    var currentLocation: CLLocation? {
+        get { queue.sync { _currentLocation } }
+        set { queue.async { self._currentLocation = newValue } }
+    }
+    
     var onLocationUpdate: ((CLLocation) -> Void)?
     var onLocationError: ((Error) -> Void)?
-    var isAuthorized = false
+    
+    private var _isAuthorized = false
+    var isAuthorized: Bool {
+        get { queue.sync { _isAuthorized } }
+        set { queue.async { self._isAuthorized = newValue } }
+    }
+    
     private var locationRetryCount = 0
-    private let locationMaxRetries = 5
-    private var locationTimeout: Timer?
-    private var isMonitoring = false
-    private let significantDistanceFilter: CLLocationDistance = 1000 // 1km
+    private let locationMaxRetries = 3
+    private weak var locationTimeout: Timer?
+    private var _isMonitoring = false
+    private var isMonitoring: Bool {
+        get { queue.sync { _isMonitoring } }
+        set { queue.async { self._isMonitoring = newValue } }
+    }
+    private let significantDistanceFilter: CLLocationDistance = 5000 // 5km
     
     private override init() {
         super.init()
@@ -25,17 +42,28 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
     func startLocationTracking() {
         locationManager.requestWhenInUseAuthorization()
         
-        if !isMonitoring {
-            isMonitoring = true
-            locationManager.startUpdatingLocation()
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            if !self._isMonitoring {
+                self._isMonitoring = true
+                DispatchQueue.main.async {
+                    self.locationManager.startUpdatingLocation()
+                }
+            }
         }
     }
     
     func stopLocationTracking() {
-        if isMonitoring {
-            isMonitoring = false
-            locationManager.stopUpdatingLocation()
-            locationTimeout?.invalidate()
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            if self._isMonitoring {
+                self._isMonitoring = false
+                DispatchQueue.main.async {
+                    self.locationManager.stopUpdatingLocation()
+                    self.locationTimeout?.invalidate()
+                    self.locationTimeout = nil
+                }
+            }
         }
     }
     
@@ -43,31 +71,41 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
         locationManager.requestWhenInUseAuthorization()
         locationManager.requestLocation()
         
-        // Setup timeout timer similar to Hammerspoon spoon
-        locationTimeout?.invalidate()
-        locationRetryCount = 0
-        locationTimeout = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        // Setup timeout timer for location requests
+        DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.locationRetryCount += 1
             
-            if self.currentLocation == nil {
-                if self.locationRetryCount < self.locationMaxRetries {
-                    print("Retrying to fetch location...")
-                    self.locationManager.requestLocation()
+            self.locationTimeout?.invalidate()
+            self.locationTimeout = nil
+            self.locationRetryCount = 0
+            
+            self.locationTimeout = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                self.locationRetryCount += 1
+                
+                if self.currentLocation == nil {
+                    if self.locationRetryCount < self.locationMaxRetries {
+                        self.locationManager.requestLocation()
+                    } else {
+                        self.locationTimeout?.invalidate()
+                        self.locationTimeout = nil
+                        self.onLocationError?(NSError(domain: "com.weatherspoon", code: 0,
+                                                      userInfo: [NSLocalizedDescriptionKey: "Location timeout"]))
+                    }
                 } else {
-                    print("Max retries reached, using cityName instead")
                     self.locationTimeout?.invalidate()
-                    self.onLocationError?(NSError(domain: "net.kartar.weatherspoon", code: 0, 
-                                                  userInfo: [NSLocalizedDescriptionKey: "Location timeout"]))
+                    self.locationTimeout = nil
                 }
-            } else {
-                self.locationTimeout?.invalidate()
             }
         }
-    }    
+    }
+    
     func cleanup() {
         stopLocationTracking()
-        locationTimeout?.invalidate()
+        DispatchQueue.main.async { [weak self] in
+            self?.locationTimeout?.invalidate()
+            self?.locationTimeout = nil
+        }
     }
     
     // MARK: - CLLocationManagerDelegate
@@ -76,7 +114,7 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
         if let location = locations.first {
             // Only update if the location is reasonably fresh (within last 5 minutes)
             let locationAge = Date().timeIntervalSince(location.timestamp)
-            if locationAge < 300 { // 5 minutes
+            if locationAge < 300 {
                 // Check if this is a significant location change
                 if let previousLocation = currentLocation {
                     let distance = location.distance(from: previousLocation)
@@ -84,13 +122,19 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
                     if distance >= significantDistanceFilter {
                         currentLocation = location
                         onLocationUpdate?(location)
-                        locationTimeout?.invalidate()
+                        DispatchQueue.main.async { [weak self] in
+                            self?.locationTimeout?.invalidate()
+                            self?.locationTimeout = nil
+                        }
                     }
                 } else {
                     // First location update
                     currentLocation = location
                     onLocationUpdate?(location)
-                    locationTimeout?.invalidate()
+                    DispatchQueue.main.async { [weak self] in
+                        self?.locationTimeout?.invalidate()
+                        self?.locationTimeout = nil
+                    }
                 }
             } else if !isMonitoring {
                 // Request a fresh location if the cached one is too old and we're not monitoring
@@ -101,10 +145,6 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         onLocationError?(error)
-    }
-    
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        // For macOS 10.15 compatibility, we'll handle this in the older delegate method
     }
     
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
@@ -119,7 +159,7 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
         default:
             isAuthorized = false
             stopLocationTracking()
-            onLocationError?(NSError(domain: "net.kartar.weatherspoon", code: 0, 
+            onLocationError?(NSError(domain: "com.weatherspoon", code: 0,
                                      userInfo: [NSLocalizedDescriptionKey: "Location access denied"]))
         }
     }

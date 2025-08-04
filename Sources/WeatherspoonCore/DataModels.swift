@@ -1,25 +1,53 @@
 // Helper structs for our app
-struct WeatherData {
-    let temperature: Double
-    let feelsLike: Double
-    let humidity: Int
-    let chanceOfRain: Int
-    let weatherDesc: String
-    let areaName: String
-    let windSpeed: String
-    let windDirection: String
-    let pressure: String
-    let visibility: String
-    let forecasts: [Forecast]
-    let isUsingLocation: Bool
-    let latitude: Double?
-    let longitude: Double?
-    let cityName: String?
+public struct WeatherData {
+    public let temperature: Double
+    public let feelsLike: Double
+    public let humidity: Int
+    public let chanceOfRain: Int
+    public let weatherDesc: String
+    public let areaName: String
+    public let windSpeed: String
+    public let windDirection: String
+    public let pressure: String
+    public let visibility: String
+    public let forecasts: [Forecast]
+    public let isUsingLocation: Bool
+    public let latitude: Double?
+    public let longitude: Double?
+    public let cityName: String?
+    
+    public init(temperature: Double, feelsLike: Double, humidity: Int, chanceOfRain: Int,
+                weatherDesc: String, areaName: String, windSpeed: String, windDirection: String,
+                pressure: String, visibility: String, forecasts: [Forecast], isUsingLocation: Bool,
+                latitude: Double?, longitude: Double?, cityName: String?) {
+        self.temperature = temperature
+        self.feelsLike = feelsLike
+        self.humidity = humidity
+        self.chanceOfRain = chanceOfRain
+        self.weatherDesc = weatherDesc
+        self.areaName = areaName
+        self.windSpeed = windSpeed
+        self.windDirection = windDirection
+        self.pressure = pressure
+        self.visibility = visibility
+        self.forecasts = forecasts
+        self.isUsingLocation = isUsingLocation
+        self.latitude = latitude
+        self.longitude = longitude
+        self.cityName = cityName
+    }
 }
 
-struct Forecast {
-    let date: String
-    let maxTemp: Double
-    let minTemp: Double
-    let description: String
+public struct Forecast {
+    public let date: String
+    public let maxTemp: Double
+    public let minTemp: Double
+    public let description: String
+    
+    public init(date: String, maxTemp: Double, minTemp: Double, description: String) {
+        self.date = date
+        self.maxTemp = maxTemp
+        self.minTemp = minTemp
+        self.description = description
+    }
 }

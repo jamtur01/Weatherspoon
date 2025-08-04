@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Weatherspoon",
     platforms: [
-        .macOS(.v10_15)
+        .macOS(.v11)
     ],
     products: [
         .executable(name: "Weatherspoon", targets: ["WeatherspoonApp"])
