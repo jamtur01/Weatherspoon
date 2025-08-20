@@ -5,16 +5,30 @@ struct UserDefault<T> {
     let key: String
     let defaultValue: T
     let userDefaults: UserDefaults
+    let checkExistence: Bool
     
-    init(key: String, defaultValue: T, userDefaults: UserDefaults = .standard) {
+    init(key: String, defaultValue: T, userDefaults: UserDefaults = .standard, checkExistence: Bool = false) {
         self.key = key
         self.defaultValue = defaultValue
         self.userDefaults = userDefaults
+        self.checkExistence = checkExistence
     }
     
     var wrappedValue: T {
         get {
-            return userDefaults.object(forKey: key) as? T ?? defaultValue
+            // If checkExistence is true and key doesn't exist, return default value
+            if checkExistence && userDefaults.object(forKey: key) == nil {
+                return defaultValue
+            }
+            
+            // Handle different types appropriately
+            if T.self == Bool.self && checkExistence {
+                return userDefaults.bool(forKey: key) as! T
+            } else if T.self == Double.self && checkExistence {
+                return userDefaults.double(forKey: key) as! T
+            } else {
+                return userDefaults.object(forKey: key) as? T ?? defaultValue
+            }
         }
         set {
             userDefaults.set(newValue, forKey: key)
@@ -22,54 +36,6 @@ struct UserDefault<T> {
     }
 }
 
-@propertyWrapper
-struct UserDefaultWithExistenceCheck {
-    let key: String
-    let defaultValue: Bool
-    let userDefaults: UserDefaults
-    
-    init(key: String, defaultValue: Bool, userDefaults: UserDefaults = .standard) {
-        self.key = key
-        self.defaultValue = defaultValue
-        self.userDefaults = userDefaults
-    }
-    
-    var wrappedValue: Bool {
-        get {
-            // If the key doesn't exist (first run), return default value
-            if userDefaults.object(forKey: key) == nil {
-                return defaultValue
-            }
-            return userDefaults.bool(forKey: key)
-        }
-        set {
-            userDefaults.set(newValue, forKey: key)
-        }
-    }
-}
-
-@propertyWrapper
-struct UserDefaultDouble {
-    let key: String
-    let defaultValue: Double
-    let userDefaults: UserDefaults
-    
-    init(key: String, defaultValue: Double, userDefaults: UserDefaults = .standard) {
-        self.key = key
-        self.defaultValue = defaultValue
-        self.userDefaults = userDefaults
-    }
-    
-    var wrappedValue: Double {
-        get {
-            // Check if the key exists
-            if userDefaults.object(forKey: key) == nil {
-                return defaultValue
-            }
-            return userDefaults.double(forKey: key)
-        }
-        set {
-            userDefaults.set(newValue, forKey: key)
-        }
-    }
-}
+// Type aliases for convenience and backward compatibility
+typealias UserDefaultWithExistenceCheck = UserDefault<Bool>
+typealias UserDefaultDouble = UserDefault<Double>

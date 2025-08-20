@@ -13,7 +13,7 @@ class WeatherService {
         "Clear": "☀️", "Sunny": "🌞", "Partly cloudy": "⛅", "Cloudy": "☁️",
         "Overcast": "🌥️", "Mist": "🌫", "Fog": "🌁", "Light rain": "🌧",
         "Moderate rain": "🌧", "Heavy rain": "🌧💧", "Light snow": "❄️",
-        "Moderate snow": "❄️🌨", "Heavy snow": "❄️❄️", "Thunderstorm": "⛈️"
+        "Moderate snow": "❄️🌨", "Heavy snow": "❄️❄️", "Blizzard": "❄️🌪", "Thunderstorm": "⛈️"
     ]
     
     init() {
@@ -50,13 +50,9 @@ class WeatherService {
         return "🌡️"
     }
     
-    func fetchWeather(location: CLLocation?, cityName: String?, completion: @escaping (Result<WeatherData, Error>) -> Void) {
-        // Cancel any existing request
-        currentTask?.cancel()
-        
-        // Build URL
-        var urlString: String
+    private func buildWeatherURL(location: CLLocation?, cityName: String?) -> Result<(URL, Bool), Error> {
         var isUsingLocation = false
+        let urlString: String
         
         if let location = location {
             let lat = String(format: "%.4f", location.coordinate.latitude)
@@ -67,12 +63,38 @@ class WeatherService {
                   let encodedCity = cityName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
             urlString = "\(baseURL)/\(encodedCity)?format=j1"
         } else {
-            completion(.failure(NetworkError.noLocationOrCity))
-            return
+            return .failure(NetworkError.noLocationOrCity)
         }
         
         guard let url = URL(string: urlString) else {
-            completion(.failure(NetworkError.invalidURL))
+            return .failure(NetworkError.invalidURL)
+        }
+        
+        return .success((url, isUsingLocation))
+    }
+    
+    private func handleLocationFallback(isUsingLocation: Bool, cityName: String?, completion: @escaping (Result<WeatherData, Error>) -> Void, fallbackError: Error) {
+        // If location failed and we have a city name, retry with city
+        if isUsingLocation && cityName != nil {
+            self.fetchWeather(location: nil, cityName: cityName, completion: completion)
+        } else {
+            completion(.failure(fallbackError))
+        }
+    }
+    
+    func fetchWeather(location: CLLocation?, cityName: String?, completion: @escaping (Result<WeatherData, Error>) -> Void) {
+        // Cancel any existing request
+        currentTask?.cancel()
+        
+        // Build URL
+        let urlResult = buildWeatherURL(location: location, cityName: cityName)
+        let (url, isUsingLocation): (URL, Bool)
+        
+        switch urlResult {
+        case .success(let result):
+            (url, isUsingLocation) = result
+        case .failure(let error):
+            completion(.failure(error))
             return
         }
         
@@ -87,36 +109,21 @@ class WeatherService {
                 if (error as NSError).code == NSURLErrorCancelled {
                     return // Request was cancelled, don't report error
                 }
-                // If location failed and we have a city name, retry with city
-                if isUsingLocation && cityName != nil {
-                    self.fetchWeather(location: nil, cityName: cityName, completion: completion)
-                    return
-                }
-                completion(.failure(NetworkError.networkError(error)))
+                self.handleLocationFallback(isUsingLocation: isUsingLocation, cityName: cityName, completion: completion, fallbackError: NetworkError.networkError(error))
                 return
             }
             
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200,
                   let data = data else {
-                // If location failed and we have a city name, retry with city
-                if isUsingLocation && cityName != nil {
-                    self.fetchWeather(location: nil, cityName: cityName, completion: completion)
-                    return
-                }
-                completion(.failure(NetworkError.invalidResponse(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)))
+                self.handleLocationFallback(isUsingLocation: isUsingLocation, cityName: cityName, completion: completion, fallbackError: NetworkError.invalidResponse(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0))
                 return
             }
             
             // Check if response is an error message
             if let responseString = String(data: data, encoding: .utf8),
                (responseString.lowercased().contains("unknown location") || !responseString.starts(with: "{")) {
-                // If location failed and we have a city name, retry with city
-                if isUsingLocation && cityName != nil {
-                    self.fetchWeather(location: nil, cityName: cityName, completion: completion)
-                    return
-                }
-                completion(.failure(NetworkError.invalidWeatherData))
+                self.handleLocationFallback(isUsingLocation: isUsingLocation, cityName: cityName, completion: completion, fallbackError: NetworkError.invalidWeatherData)
                 return
             }
             

@@ -14,10 +14,10 @@ class Configuration {
     @UserDefault(key: "WeatherCityName", defaultValue: "Brooklyn, NYC")
     var cityName: String
     
-    @UserDefaultDouble(key: "WeatherUpdateInterval", defaultValue: 3600) // 1 hour default
+    @UserDefault(key: "WeatherUpdateInterval", defaultValue: 3600.0, checkExistence: true) // 1 hour default
     var updateInterval: TimeInterval
     
-    @UserDefaultWithExistenceCheck(key: "WeatherUseLocation", defaultValue: true)
+    @UserDefault(key: "WeatherUseLocation", defaultValue: true, checkExistence: true)
     var useLocation: Bool
     
     private init() {}

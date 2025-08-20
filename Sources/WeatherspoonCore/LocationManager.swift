@@ -60,9 +60,8 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
                 self._isMonitoring = false
                 DispatchQueue.main.async {
                     self.locationManager.stopUpdatingLocation()
-                    self.locationTimeout?.invalidate()
-                    self.locationTimeout = nil
                 }
+                self.clearLocationTimeout()
             }
         }
     }
@@ -75,8 +74,7 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
-            self.locationTimeout?.invalidate()
-            self.locationTimeout = nil
+            self.clearLocationTimeoutSyncronously()
             self.locationRetryCount = 0
             
             self.locationTimeout = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
@@ -87,14 +85,12 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
                     if self.locationRetryCount < self.locationMaxRetries {
                         self.locationManager.requestLocation()
                     } else {
-                        self.locationTimeout?.invalidate()
-                        self.locationTimeout = nil
+                        self.clearLocationTimeoutSyncronously()
                         self.onLocationError?(NSError(domain: "com.weatherspoon", code: 0,
                                                       userInfo: [NSLocalizedDescriptionKey: "Location timeout"]))
                     }
                 } else {
-                    self.locationTimeout?.invalidate()
-                    self.locationTimeout = nil
+                    self.clearLocationTimeoutSyncronously()
                 }
             }
         }
@@ -102,10 +98,19 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
     
     func cleanup() {
         stopLocationTracking()
+        clearLocationTimeout()
+    }
+    
+    private func clearLocationTimeout() {
         DispatchQueue.main.async { [weak self] in
             self?.locationTimeout?.invalidate()
             self?.locationTimeout = nil
         }
+    }
+    
+    private func clearLocationTimeoutSyncronously() {
+        locationTimeout?.invalidate()
+        locationTimeout = nil
     }
     
     // MARK: - CLLocationManagerDelegate
@@ -122,19 +127,13 @@ class LocationManager: NSObject, CLLocationManagerDelegate {
                     if distance >= significantDistanceFilter {
                         currentLocation = location
                         onLocationUpdate?(location)
-                        DispatchQueue.main.async { [weak self] in
-                            self?.locationTimeout?.invalidate()
-                            self?.locationTimeout = nil
-                        }
+                        clearLocationTimeout()
                     }
                 } else {
                     // First location update
                     currentLocation = location
                     onLocationUpdate?(location)
-                    DispatchQueue.main.async { [weak self] in
-                        self?.locationTimeout?.invalidate()
-                        self?.locationTimeout = nil
-                    }
+                    clearLocationTimeout()
                 }
             } else if !isMonitoring {
                 // Request a fresh location if the cached one is too old and we're not monitoring

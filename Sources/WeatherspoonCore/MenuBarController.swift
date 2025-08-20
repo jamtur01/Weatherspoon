@@ -52,14 +52,34 @@ public class MenuBarController: NSObject {
         return item
     }
     
+    private func insertDummyMenuItem(_ title: String, at index: Int) {
+        menu.insertItem(createDummyMenuItem(title: title), at: index)
+    }
+    
     private func setupMenu() {
         // Add initial menu items
         menu.addItem(createDummyMenuItem(title: "Updating weather..."))
         menu.addItem(NSMenuItem.separator())
         
-        // Add settings submenu
+        setupSettingsMenu()
+        setupQuitOption()
+    }
+    
+    private func setupSettingsMenu() {
         let settingsMenu = NSMenu()
         
+        setupLocationSettings(in: settingsMenu)
+        setupUpdateIntervalMenu(in: settingsMenu)
+        setupRefreshOption(in: settingsMenu)
+        
+        // Add settings menu to main menu
+        let settingsMenuItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        settingsMenuItem.submenu = settingsMenu
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(settingsMenuItem)
+    }
+    
+    private func setupLocationSettings(in settingsMenu: NSMenu) {
         // Location toggle
         let useLocationItem = NSMenuItem(title: "Use Current Location", action: #selector(toggleUseLocation), keyEquivalent: "l")
         useLocationItem.target = self
@@ -70,8 +90,9 @@ public class MenuBarController: NSObject {
         let cityMenuItem = NSMenuItem(title: "Set City", action: #selector(setCity), keyEquivalent: "c")
         cityMenuItem.target = self
         settingsMenu.addItem(cityMenuItem)
-        
-        // Update interval settings
+    }
+    
+    private func setupUpdateIntervalMenu(in settingsMenu: NSMenu) {
         let updateMenu = NSMenu()
         
         for (title, seconds) in config.availableIntervals {
@@ -88,20 +109,16 @@ public class MenuBarController: NSObject {
         let updateMenuItem = NSMenuItem(title: "Update Interval", action: nil, keyEquivalent: "")
         updateMenuItem.submenu = updateMenu
         settingsMenu.addItem(updateMenuItem)
-        
-        // Manual refresh option
+    }
+    
+    private func setupRefreshOption(in settingsMenu: NSMenu) {
         settingsMenu.addItem(NSMenuItem.separator())
         let refreshMenuItem = NSMenuItem(title: "Refresh Now", action: #selector(refreshWeather), keyEquivalent: "r")
         refreshMenuItem.target = self
         settingsMenu.addItem(refreshMenuItem)
-        
-        // Add settings menu to main menu
-        let settingsMenuItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
-        settingsMenuItem.submenu = settingsMenu
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(settingsMenuItem)
-        
-        // Add Quit option
+    }
+    
+    private func setupQuitOption() {
         menu.addItem(NSMenuItem.separator())
         let quitMenuItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quitMenuItem.target = self
@@ -267,7 +284,7 @@ public class MenuBarController: NSObject {
                     
                     // Update menu with error
                     self.clearMenuItems()
-                    self.menu.insertItem(self.createDummyMenuItem(title: "Error: \(error.localizedDescription)"), at: 0)
+                    self.insertDummyMenuItem("Error: \(error.localizedDescription)", at: 0)
                     
                     // Add retry option
                     self.menu.insertItem(NSMenuItem.separator(), at: 1)
@@ -354,22 +371,22 @@ public class MenuBarController: NSObject {
         
         // Current weather description
         let currentWeatherTitle = "Current Weather: \(weatherData.weatherDesc)"
-        menu.insertItem(createDummyMenuItem(title: currentWeatherTitle), at: currentIndex)
+        insertDummyMenuItem(currentWeatherTitle, at: currentIndex)
         currentIndex += 1
         
         // Wind
         let windTitle = "Wind: \(weatherData.windSpeed) km/h \(weatherData.windDirection)"
-        menu.insertItem(createDummyMenuItem(title: windTitle), at: currentIndex)
+        insertDummyMenuItem(windTitle, at: currentIndex)
         currentIndex += 1
         
         // Pressure
         let pressureTitle = "Pressure: \(weatherData.pressure) hPa"
-        menu.insertItem(createDummyMenuItem(title: pressureTitle), at: currentIndex)
+        insertDummyMenuItem(pressureTitle, at: currentIndex)
         currentIndex += 1
         
         // Visibility
         let visibilityTitle = "Visibility: \(weatherData.visibility) km"
-        menu.insertItem(createDummyMenuItem(title: visibilityTitle), at: currentIndex)
+        insertDummyMenuItem(visibilityTitle, at: currentIndex)
         currentIndex += 1
         
         return currentIndex
@@ -380,7 +397,7 @@ public class MenuBarController: NSObject {
         
         // Forecast header
         let forecastTitle = "Forecast:"
-        menu.insertItem(createDummyMenuItem(title: forecastTitle), at: currentIndex)
+        insertDummyMenuItem(forecastTitle, at: currentIndex)
         currentIndex += 1
         
         // Add each forecast day
@@ -400,7 +417,7 @@ public class MenuBarController: NSObject {
                                      dateTitle, forecast.description,
                                      minEmoji, forecast.minTemp, maxEmoji, forecast.maxTemp)
             
-            menu.insertItem(createDummyMenuItem(title: forecastTitle), at: currentIndex)
+            insertDummyMenuItem(forecastTitle, at: currentIndex)
             currentIndex += 1
         }
         
@@ -417,7 +434,7 @@ public class MenuBarController: NSObject {
             locationInfoTitle = "❓ Location unknown"
         }
         
-        menu.insertItem(createDummyMenuItem(title: locationInfoTitle), at: index)
+        insertDummyMenuItem(locationInfoTitle, at: index)
         return index + 1
     }
     

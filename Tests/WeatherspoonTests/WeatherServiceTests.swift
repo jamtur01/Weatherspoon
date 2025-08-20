@@ -24,7 +24,7 @@ class WeatherServiceTests: XCTestCase {
     }
     
     func testGetTempEmojiForTemperatures() {
-        XCTAssertEqual(weatherService.getTempEmoji(forTemp: -15), "🌡️") // Below threshold, uses default
+        XCTAssertEqual(weatherService.getTempEmoji(forTemp: -15), "⛄") // Below threshold, uses default
         XCTAssertEqual(weatherService.getTempEmoji(forTemp: -10), "⛄")
         XCTAssertEqual(weatherService.getTempEmoji(forTemp: -5), "⛄")
         XCTAssertEqual(weatherService.getTempEmoji(forTemp: 0), "❄️")

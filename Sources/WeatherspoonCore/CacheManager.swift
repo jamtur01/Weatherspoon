@@ -10,12 +10,6 @@ class CacheManager<T> {
         self.ttl = ttl
     }
     
-    var isValid: Bool {
-        queue.sync {
-            guard let timestamp = timestamp else { return false }
-            return Date().timeIntervalSince(timestamp) < ttl
-        }
-    }
     
     func get() -> T? {
         queue.sync {
